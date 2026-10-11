@@ -4,12 +4,17 @@ const loadButton = document.getElementById("load-btn");
 const statusMessage = document.getElementById("status");
 const notesList = document.getElementById("notes-list");
 
+const noteForm = document.getElementById("note-form");
+const titleInput = document.getElementById("title-input");
+const bodyInput = document.getElementById("body-input");
+const submitButton = document.getElementById("submit-btn");
+
 function showStatus(message, type = "") {
   statusMessage.textContent = message;
   statusMessage.className = type;
 }
 
-// Reusable function for making HTTP requests.
+// Reusable function for HTTP requests.
 async function request(url, options = {}) {
   const response = await fetch(url, options);
 
@@ -17,7 +22,7 @@ async function request(url, options = {}) {
     throw new Error(`Request failed with status ${response.status}`);
   }
 
-  // Some successful responses, such as DELETE, may have no body.
+  // Some successful responses, such as DELETE, have no body.
   if (response.status === 204) {
     return { data: null, status: response.status };
   }
@@ -27,9 +32,11 @@ async function request(url, options = {}) {
   return { data, status: response.status };
 }
 
-function renderNote(note) {
+// Create a note element safely using textContent.
+function createNoteElement(note) {
   const item = document.createElement("li");
   item.className = "note";
+  item.dataset.id = note.id;
 
   const title = document.createElement("h3");
   title.textContent = note.title;
@@ -38,7 +45,12 @@ function renderNote(note) {
   body.textContent = note.body || "No body provided.";
 
   item.append(title, body);
-  notesList.appendChild(item);
+
+  return item;
+}
+
+function renderNote(note) {
+  notesList.appendChild(createNoteElement(note));
 }
 
 async function loadNotes() {
@@ -51,11 +63,10 @@ async function loadNotes() {
     const notes = result.data;
 
     if (notes.length === 0) {
-      showStatus("No notes found.", "success");
-
       const emptyItem = document.createElement("li");
-      emptyItem.textContent = "Your notes will appear here when available.";
+      emptyItem.textContent = "No notes found. Create your first note!";
       notesList.appendChild(emptyItem);
+      showStatus("No notes found.", "success");
       return;
     }
 
@@ -72,4 +83,62 @@ async function loadNotes() {
   }
 }
 
+async function createNote(event) {
+  event.preventDefault();
+
+  const title = titleInput.value.trim();
+  const body = bodyInput.value.trim();
+
+  if (!title) {
+    showStatus("Please enter a title.", "error");
+    titleInput.focus();
+    return;
+  }
+
+  if (title.length > 100) {
+    showStatus("The title must be 100 characters or fewer.", "error");
+    titleInput.focus();
+    return;
+  }
+
+  submitButton.disabled = true;
+  showStatus("Creating note...");
+
+  try {
+    const result = await request(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        body,
+        userId: 1
+      })
+    });
+
+    const newNote = result.data;
+
+    // JSONPlaceholder simulates creation; it does not permanently save the post.
+    // We add the returned note locally so it appears during this page session.
+    notesList.prepend(createNoteElement(newNote));
+
+    showStatus(
+      `Note created (status ${result.status}, id ${newNote.id}).`,
+      "success"
+    );
+
+    noteForm.reset();
+  } catch (error) {
+    showStatus(
+      "Sorry, we couldn't create your note. Please try again.",
+      "error"
+    );
+    console.error("Error creating note:", error);
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
 loadButton.addEventListener("click", loadNotes);
+noteForm.addEventListener("submit", createNote);
