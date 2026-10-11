@@ -22,7 +22,7 @@ async function request(url, options = {}) {
     throw new Error(`Request failed with status ${response.status}`);
   }
 
-  // Some successful responses, such as DELETE, have no body.
+  // DELETE endpoints can return 204 No Content.
   if (response.status === 204) {
     return { data: null, status: response.status };
   }
@@ -32,7 +32,7 @@ async function request(url, options = {}) {
   return { data, status: response.status };
 }
 
-// Create a note element safely using textContent.
+// Build note elements safely using textContent.
 function createNoteElement(note) {
   const item = document.createElement("li");
   item.className = "note";
@@ -44,7 +44,14 @@ function createNoteElement(note) {
   const body = document.createElement("p");
   body.textContent = note.body || "No body provided.";
 
-  item.append(title, body);
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "delete-btn";
+  deleteButton.textContent = "Delete";
+
+  deleteButton.addEventListener("click", () => deleteNote(note.id, item, deleteButton));
+
+  item.append(title, body, deleteButton);
 
   return item;
 }
@@ -73,10 +80,7 @@ async function loadNotes() {
     notes.forEach(renderNote);
     showStatus(`Loaded ${notes.length} notes from the server.`, "success");
   } catch (error) {
-    showStatus(
-      "Sorry, we couldn't load your notes. Please try again.",
-      "error"
-    );
+    showStatus("Sorry, we couldn't load your notes. Please try again.", "error");
     console.error("Error loading notes:", error);
   } finally {
     loadButton.disabled = false;
@@ -119,8 +123,8 @@ async function createNote(event) {
 
     const newNote = result.data;
 
-    // JSONPlaceholder simulates creation; it does not permanently save the post.
-    // We add the returned note locally so it appears during this page session.
+    // JSONPlaceholder simulates creation but does not permanently store posts.
+    // Keep the created note in the current page session.
     notesList.prepend(createNoteElement(newNote));
 
     showStatus(
@@ -130,13 +134,44 @@ async function createNote(event) {
 
     noteForm.reset();
   } catch (error) {
-    showStatus(
-      "Sorry, we couldn't create your note. Please try again.",
-      "error"
-    );
+    showStatus("Sorry, we couldn't create your note. Please try again.", "error");
     console.error("Error creating note:", error);
   } finally {
     submitButton.disabled = false;
+  }
+}
+
+async function deleteNote(noteId, noteElement, deleteButton) {
+  deleteButton.disabled = true;
+  showStatus("Deleting note...");
+
+  try {
+    const result = await request(`${API_URL}/${noteId}`, {
+      method: "DELETE"
+    });
+
+    // JSONPlaceholder simulates deletion; it does not permanently change its data.
+    // Remove the note from the current page after the successful response.
+    noteElement.remove();
+
+    if (notesList.children.length === 0) {
+      const emptyItem = document.createElement("li");
+      emptyItem.textContent = "No notes found. Create your first note!";
+      notesList.appendChild(emptyItem);
+    }
+
+    showStatus(
+      `Note ${noteId} deleted (status ${result.status}).`,
+      "success"
+    );
+  } catch (error) {
+    showStatus(
+      `Sorry, we couldn't delete note ${noteId}. Please try again.`,
+      "error"
+    );
+    console.error("Error deleting note:", error);
+  } finally {
+    deleteButton.disabled = false;
   }
 }
 
